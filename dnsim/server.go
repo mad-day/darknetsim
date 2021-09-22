@@ -1,5 +1,4 @@
-MIT License
-
+/*
 Copyright (c) 2021 Simon Schmidt
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,3 +18,56 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+*/
+
+
+package main
+
+
+import "github.com/mad-day/darknetsim/serverlib"
+import flags "flag"
+import "net"
+
+var cli_prt = flags.String("c", "128.0.0.1:9991", "socks5 proxy port")
+var srv_prt = flags.String("s", "128.0.0.1:9996", "smux service port")
+var help = flags.Bool("h",false,"Help!")
+
+var finished = make(chan int,16)
+func signl() { finished <- 1 }
+
+func main(){
+	flags.Parse()
+	if *help {
+		flags.PrintDefaults()
+		return
+	}
+	
+	cll,e := net.Listen("tcp",*cli_prt)
+	if e!=nil { return }
+	defer cll.Close()
+	sll,e := net.Listen("tcp",*srv_prt)
+	if e!=nil { return }
+	defer sll.Close()
+	
+	var srv = new(serverlib.Server)
+	
+	go func(){
+		defer signl()
+		for {
+			c,e := cll.Accept()
+			if e!=nil { continue }
+			srv.ServeSocks5(c)
+		}
+	}()
+	go func(){
+		defer signl()
+		for {
+			c,e := sll.Accept()
+			if e!=nil { continue }
+			srv.ServeService(c)
+		}
+	}()
+	<- finished
+	<- finished
+}
+
