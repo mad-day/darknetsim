@@ -12,6 +12,22 @@ Get the client library with `go get -u github.com/mad-day/darknetsim/client`.
 This library is used to create "hidden services" in this simulation/fake darknet.
 
 
+## Running dnsim
+
+Running `dnsim` is as simple as just starting `dnsim` with `./dnsim`.
+
+When running `./dnsim -h` you get:
+
+```
+  -c string
+    	socks5 proxy port (default "127.0.0.1:9991")
+  -h	Help!
+  -s string
+    	smux service port (default "127.0.0.1:9996")
+```
+
+which should be self-explanatory.
+
 ## Hidden service example:
 
 ```go
