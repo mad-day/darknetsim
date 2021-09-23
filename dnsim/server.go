@@ -27,9 +27,10 @@ package main
 import "github.com/mad-day/darknetsim/serverlib"
 import flags "flag"
 import "net"
+import "log"
 
-var cli_prt = flags.String("c", "128.0.0.1:9991", "socks5 proxy port")
-var srv_prt = flags.String("s", "128.0.0.1:9996", "smux service port")
+var cli_prt = flags.String("c", "127.0.0.1:9991", "socks5 proxy port")
+var srv_prt = flags.String("s", "127.0.0.1:9996", "smux service port")
 var help = flags.Bool("h",false,"Help!")
 
 var finished = make(chan int,16)
@@ -42,10 +43,10 @@ func main(){
 		return
 	}
 	
-	cll,e := net.Listen("tcp",*cli_prt)
-	if e!=nil { return }
+	cll,e := net.Listen("tcp4",*cli_prt)
+	if e!=nil { log.Fatal(e) }
 	defer cll.Close()
-	sll,e := net.Listen("tcp",*srv_prt)
+	sll,e := net.Listen("tcp4",*srv_prt)
 	if e!=nil { return }
 	defer sll.Close()
 	

@@ -35,12 +35,28 @@ import (
 	"errors"
 )
 
+var mutex sync.Mutex
+
+func dolock() func() {
+	mutex.Lock()
+	return mutex.Unlock
+}
+
 type Server struct{
 	listens sync.Map
 	cfg *smux.Config
 	srv *socks5.Server
 }
 var notFound = errors.New("notfound")
+
+func kick(s *Server,str string) bool {
+	defer dolock()()
+	val,ok := s.listens.Load(str)
+	if !ok { return true }
+	if !val.(*service).sess.IsClosed() { return false }
+	s.listens.Delete(str)
+	return true
+}
 
 func handshake(s *Server,c net.Conn) {
 	buf := make([]byte,128)
@@ -50,23 +66,52 @@ func handshake(s *Server,c net.Conn) {
 	for i,b := range buf { if b==0 { l = i; break } }
 	str := string(buf[:l])
 	if s.cfg==nil { s.cfg = smux.DefaultConfig() }
-	sms,err := smux.Server(c,s.cfg)
+	fc := &filterSocket{c,nil}
+	sms,err := smux.Server(fc,s.cfg)
+	fc.sess = sms
 	if err!=nil { c.Close(); return }
-	
-	_,cnf := s.listens.LoadOrStore(str,&service{ sms })
-	if cnf { sms.Close() }
+	svc := &service{ sms, c }
+	for {
+		_,cnf := s.listens.LoadOrStore(str,svc)
+		if !cnf { break }
+		if kick(s,str) { continue }
+		sms.Close()
+		break
+	}
+}
+
+type filterSocket struct{
+	net.Conn
+	sess *smux.Session
+}
+func (fs *filterSocket) Read(buf []byte) (int,error) {
+	i,err := fs.Conn.Read(buf)
+	if err!=nil {
+		s := fs.sess
+		fs.sess = nil
+		if s!=nil { s.Close() }
+	}
+	return i,err
 }
 
 type service struct{
 	sess *smux.Session
+	sock net.Conn
 }
+
+
+type fakeSock struct{
+	*smux.Stream
+}
+func (fs *fakeSock) CloseWrite() error { return fs.Close() }
+
 
 func (s *Server) dial(ctx context.Context, network, addr string) (net.Conn, error) {
 	raw,ok := s.listens.Load(addr)
 	if !ok { return nil,notFound }
 	c,err := raw.(*service).sess.OpenStream()
 	if err!=nil { return nil,err }
-	return c,nil
+	return &fakeSock{c},nil
 }
 
 func (s *Server) ServeService(c net.Conn) { handshake(s,c) }
